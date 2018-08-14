@@ -83,7 +83,7 @@ func Main() int {
 }
 
 func run(server string, command []string, err chan error) {
-	cmds := []string{"ssh", server, strings.Join(command, " ")}
+	cmds := []string{"tsh", "ssh", server, strings.Join(command, " ")}
 	fmt.Println("Executing : ", cmds)
 
 	cmd := exec.Command(cmds[0], cmds[1:]...)
