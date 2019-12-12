@@ -18,7 +18,7 @@ func main() {
 }
 
 type ServiceResponse struct {
-	Address string
+	Address     string
 	ServiceName string
 	ServiceTags []string
 }
@@ -102,7 +102,7 @@ func Main() int {
 	}
 
 	for _, s := range services {
-		if *group == "all" {
+		if tag == "" || tag == "all" {
 			hosts = append(hosts, "root@"+s.Address)
 		} else {
 			for _, st := range s.ServiceTags {
