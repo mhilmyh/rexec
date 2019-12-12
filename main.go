@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,6 +15,12 @@ import (
 func main() {
 	flag.Parse()
 	os.Exit(Main())
+}
+
+type ServiceResponse struct {
+	Address string
+	ServiceName string
+	ServiceTags []string
 }
 
 var (
@@ -39,7 +47,6 @@ func Main() int {
 		return 0
 	}
 
-	var err error
 	var hosts []string
 	if *host != "" {
 		hosts = strings.Split(*host, ",")
@@ -54,14 +61,61 @@ func Main() int {
 		return 0
 	}
 
-	if len(hosts) == 0 {
-		hosts, err = readHostConfig(*group)
+	if len(args) == 0 {
+		return 0
+	}
+
+	source := strings.Split(*group, ":")
+
+	if len(source) == 0 {
+		fmt.Println(errColor("please insert group"))
+		return 0
+	}
+
+	if len(source) > 2 {
+		fmt.Println(errColor("group not supported"))
+		return 0
+	}
+
+	var tag string
+	if len(source) > 1 {
+		tag = source[1]
+	}
+
+	addresses, err := readHostConfig(source[0])
+	if err != nil {
+		fmt.Println(errColor(err.Error()))
+		return 0
+	}
+
+	var services []ServiceResponse
+	for _, address := range addresses {
+		s, err := getServices(address)
 		if err != nil {
 			fmt.Println(errColor(err.Error()))
 		}
+		services = append(services, s...)
 	}
 
-	if len(args) == 0 {
+	if len(services) == 0 {
+		return 0
+	}
+
+	for _, s := range services {
+		if *group == "all" {
+			hosts = append(hosts, "root@"+s.Address)
+		} else {
+			for _, st := range s.ServiceTags {
+				if tag == st {
+					hosts = append(hosts, "root@"+s.Address)
+					break
+				}
+			}
+		}
+	}
+
+	if len(hosts) == 0 {
+		fmt.Println(errColor("tag not found"))
 		return 0
 	}
 
@@ -133,4 +187,20 @@ func (c *writer) run() {
 func (c *writer) Write(b []byte) (int, error) {
 	c.pipe <- c.prefix + string(b)
 	return len(b), nil
+}
+
+func getServices(address string) ([]ServiceResponse, error) {
+	resp, err := http.Get(address)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	var services []ServiceResponse
+	err = json.NewDecoder(resp.Body).Decode(&services)
+	if err != nil {
+		return nil, err
+	}
+	return services, nil
 }
