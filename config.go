@@ -156,7 +156,7 @@ func getConfigPath(file string) (*os.File, error) {
 }
 
 func trimLines(lines []string) []string {
-	newlines := []string{}
+	var newlines []string
 	for _, l := range lines {
 		l = strings.TrimSpace(l)
 		if l == "" || strings.HasPrefix(l, "#") {

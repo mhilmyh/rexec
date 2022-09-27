@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 func main() {
@@ -24,24 +22,12 @@ type ServiceResponse struct {
 }
 
 var (
-	colorList = []func(string, ...interface{}) string{
-		color.BlueString,
-		color.CyanString,
-		color.GreenString,
-		color.MagentaString,
-		color.YellowString,
-	}
-	colorCounter int
-)
-
-var (
 	host  = flag.String("h", "", "comma separated host")
 	edit  = flag.Bool("e", false, "edit config")
 	group = flag.String("g", "", "specify group to run")
 )
 
 func Main() int {
-
 	if len(os.Args) < 2 {
 		fmt.Println("usage: rexec [-e | -h <hosts>|-g <group>] <command>")
 		return 0
@@ -151,42 +137,6 @@ func run(server string, command []string, err chan error) {
 	}
 
 	err <- fmt.Errorf("[%s] %s", server, "session closed")
-}
-
-func randColor(s string) string {
-	colorCounter++
-	if colorCounter == len(colorList) {
-		colorCounter = 0
-	}
-	return colorList[colorCounter](s)
-}
-func errColor(s string) string {
-	return color.RedString(s)
-}
-
-type writer struct {
-	prefix string
-	pipe   chan string
-}
-
-func newWriter(prefix string) *writer {
-	w := &writer{
-		prefix: prefix,
-		pipe:   make(chan string),
-	}
-	go w.run()
-	return w
-}
-
-func (c *writer) run() {
-	for {
-		fmt.Print(<-c.pipe)
-	}
-}
-
-func (c *writer) Write(b []byte) (int, error) {
-	c.pipe <- c.prefix + string(b)
-	return len(b), nil
 }
 
 func getServices(address string) ([]ServiceResponse, error) {
