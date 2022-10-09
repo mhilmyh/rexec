@@ -7,8 +7,22 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 )
+
+var (
+	prefix = flag.String("p", "tsh ssh", "prefix when running the command")
+	user = flag.String("u", "root", "default user when no user provided")
+	host  = flag.String("h", "", "comma separated host")
+	edit  = flag.Bool("e", false, "edit config")
+	group = flag.String("g", "", "specify group to run")
+	regexIpAddress *regexp.Regexp
+)
+
+func init() {
+	regexIpAddress = regexp.MustCompile(`((.+)@)?(\d+\.?)+`)
+}
 
 func main() {
 	flag.Parse()
@@ -17,19 +31,11 @@ func main() {
 
 type ServiceResponse struct {
 	Address     string
-	ServiceName string
-	ServiceTags []string
 }
-
-var (
-	host  = flag.String("h", "", "comma separated host")
-	edit  = flag.Bool("e", false, "edit config")
-	group = flag.String("g", "", "specify group to run")
-)
 
 func Main() int {
 	if len(os.Args) < 2 {
-		fmt.Println("usage: rexec [-e | -h <hosts>|-g <group>] <command>")
+		fmt.Println("usage: rexec [-e | -h <hosts> | -g <group> | -u <user> | -p <prefix>] <command>")
 		return 0
 	}
 
@@ -37,7 +43,6 @@ func Main() int {
 	if *host != "" {
 		hosts = strings.Split(*host, ",")
 	}
-	args := flag.Args()
 
 	if *edit {
 		err := editConfig()
@@ -47,31 +52,24 @@ func Main() int {
 		return 0
 	}
 
+	args := flag.Args()
 	if len(args) == 0 {
 		return 0
 	}
 
-	source := strings.Split(*group, ":")
-
-	if len(source) == 0 {
-		fmt.Println(errColor("please insert group"))
-		return 0
+	var groups []string
+	if *group != "" {
+		groups = strings.Split(*group, ",")
 	}
 
-	if len(source) > 2 {
-		fmt.Println(errColor("group not supported"))
-		return 0
-	}
-
-	var tag string
-	if len(source) > 1 {
-		tag = source[1]
-	}
-
-	addresses, err := readHostConfig(source[0])
-	if err != nil {
-		fmt.Println(errColor(err.Error()))
-		return 0
+	var addresses []string
+	for _, grp := range groups {
+		addrs, err := readHostConfig(grp)
+		if err != nil {
+			fmt.Println(errColor(err.Error()))
+			return 0
+		}
+		addresses = append(addresses, addrs...)
 	}
 
 	var services []ServiceResponse
@@ -83,32 +81,22 @@ func Main() int {
 		services = append(services, s...)
 	}
 
-	if len(services) == 0 {
-		return 0
-	}
-
 	for _, s := range services {
-		if tag == "" || tag == "all" {
-			hosts = append(hosts, "root@"+s.Address)
-		} else {
-			for _, st := range s.ServiceTags {
-				if tag == st {
-					hosts = append(hosts, "root@"+s.Address)
-					break
-				}
-			}
+		if regexIpAddress.MatchString(s.Address) {
+			hosts = append(hosts, s.Address)
 		}
+		hosts = append(hosts, *user+"@"+s.Address)
 	}
 
 	if len(hosts) == 0 {
-		fmt.Println(errColor("tag not found"))
+		fmt.Println(errColor("no host found"))
 		return 0
 	}
 
 	var grCount int
 	errChan := make(chan error)
-	for _, host := range hosts {
-		go run(host, args, errChan)
+	for _, h := range hosts {
+		go run(h, args, errChan)
 		grCount++
 	}
 	for grCount != 0 {
@@ -123,8 +111,9 @@ func Main() int {
 }
 
 func run(server string, command []string, err chan error) {
-	cmds := []string{"tsh", "ssh", server, strings.Join(command, " ")}
-	fmt.Println("Executing : ", cmds)
+	cmdStr := *prefix + " " + server + " " + strings.Join(command, " ")
+	cmds := strings.Split(strings.TrimSpace(cmdStr), " ")
+	fmt.Println("Executing : '", cmds, "'")
 
 	cmd := exec.Command(cmds[0], cmds[1:]...)
 
@@ -140,6 +129,9 @@ func run(server string, command []string, err chan error) {
 }
 
 func getServices(address string) ([]ServiceResponse, error) {
+	if regexIpAddress.MatchString(address) {
+		return []ServiceResponse{{Address: address}}, nil
+	}
 	resp, err := http.Get(address)
 	if err != nil {
 		return nil, err
