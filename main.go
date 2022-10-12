@@ -21,7 +21,7 @@ var (
 )
 
 func init() {
-	regexIpAddress = regexp.MustCompile(`((.+)@)?(\d+\.?)+`)
+	regexIpAddress = regexp.MustCompile(`^(\w+)@((\d{1,3})(\.?)){5,}$`)
 }
 
 func main() {
